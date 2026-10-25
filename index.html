@@ -4,14 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FeelUs — Ruang Privat Kita Berdua</title>
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React & ReactDOM -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Babel for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Firebase Compat SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <style>
@@ -25,25 +21,25 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // Konfigurasi Cloud Firebase Otomatis (feelus-7612d)
     const DEFAULT_FIREBASE_CONFIG = {
       apiKey: "AIzaSyBHX_1nKsmXX5DHTAnctf_00j01ARTRCrw",
       authDomain: "feelus-7612d.firebaseapp.com",
       projectId: "feelus-7612d"
     };
 
+    const MAIN_DOC_ID = "RUANG_UTAMA_KITA";
+
     const DEFAULT_STATE = {
       coupleInfo: {
+        roomCode: "KITA-BERDUA-01",
         partner1: "Bima",
         partner2: "Nadia",
         anniversary: "2024-02-14",
-        mood1: "😊 Bahagia",
-        mood2: "🥰 Kangen",
         lastTouch: "Bima mengirim Peluk Hangat 🫂"
       },
       messages: [
         { id: 1, sender: "partner1", text: "Selamat datang di ruang privat kita berdua, FeelUs! ❤️", time: "09:00", type: "text" },
-        { id: 2, sender: "partner2", text: "Sekarang kita bisa buka dari HP masing-masing ya 🥰", time: "09:02", type: "text" }
+        { id: 2, sender: "partner2", text: "Sekarang semua pengaturan otomatis sinkron di semua perangkat 🥰", time: "09:02", type: "text" }
       ],
       posts: [
         {
@@ -53,7 +49,6 @@
           location: "Kafe Senja, Jakarta",
           imageUrl: "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=800&q=80",
           likes: ["partner1", "partner2"],
-          comments: [{ id: 1, author: "partner1", text: "Momen favoritku! Minggu depan ke sini lagi yuk." }],
           time: "Kemarin"
         }
       ],
@@ -70,36 +65,13 @@
     };
 
     function FeelUsApp() {
-      // Identitas & Ruang Pasangan
-      const [roomCode, setRoomCode] = useState(() => localStorage.getItem("feelus_room") || "KITA-BERDUA-01");
       const [activeRole, setActiveRole] = useState(() => localStorage.getItem("feelus_role") || "partner1");
       const [activeTab, setActiveTab] = useState("chat");
-
-      // Data Aplikasi
-      const [appData, setAppData] = useState(() => {
-        const saved = localStorage.getItem(`feelus_data_${roomCode}`);
-        return saved ? JSON.parse(saved) : DEFAULT_STATE;
-      });
-
-      // Status Cloud Firebase (Otomatis menggunakan DEFAULT_FIREBASE_CONFIG)
-      const [firebaseConfigStr, setFirebaseConfigStr] = useState(() => {
-        const savedConfig = localStorage.getItem("feelus_fb_config");
-        if (savedConfig) {
-          try {
-            JSON.parse(savedConfig);
-            return savedConfig;
-          } catch (e) {
-            localStorage.removeItem("feelus_fb_config");
-          }
-        }
-        return JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
-      });
-
+      const [appData, setAppData] = useState(DEFAULT_STATE);
       const [isCloudConnected, setIsCloudConnected] = useState(false);
       const [cloudError, setCloudError] = useState("");
       const [showCloudModal, setShowCloudModal] = useState(false);
 
-      // Input States
       const [chatInput, setChatInput] = useState("");
       const [msgType, setMsgType] = useState("text");
       const [newPostCaption, setNewPostCaption] = useState("");
@@ -107,55 +79,50 @@
       const [newPostLocation, setNewPostLocation] = useState("");
       const [newBucket, setNewBucket] = useState("");
       const dbRef = useRef(null);
-      const chatEndRef = useRef(null);
 
-      // Inisialisasi & Sinkronisasi Firebase Firestore
+      // Sinkronisasi Real-Time Semua Data (Termasuk Kode Ruang) dari 1 Dokumen Utama
       useEffect(() => {
-        let parsedConfig = DEFAULT_FIREBASE_CONFIG;
-        try {
-          if (firebaseConfigStr.trim()) {
-            parsedConfig = JSON.parse(firebaseConfigStr);
-          }
-        } catch (err) {
-          setCloudError("Format JSON tidak valid, menggunakan konfigurasi bawaan.");
-          parsedConfig = DEFAULT_FIREBASE_CONFIG;
-        }
-
         try {
           if (!firebase.apps.length) {
-            firebase.initializeApp(parsedConfig);
+            firebase.initializeApp(DEFAULT_FIREBASE_CONFIG);
           }
           const db = firebase.firestore();
           dbRef.current = db;
-          setIsCloudConnected(true);
-          setCloudError("");
 
-          const docRef = db.collection("feelus_rooms").doc(roomCode);
+          const docRef = db.collection("feelus_rooms").doc(MAIN_DOC_ID);
           const unsubscribe = docRef.onSnapshot((doc) => {
+            setIsCloudConnected(true);
+            setCloudError("");
             if (doc.exists) {
-              setAppData(doc.data());
+              const cloudData = doc.data();
+              setAppData({
+                ...DEFAULT_STATE,
+                ...cloudData,
+                coupleInfo: {
+                  ...DEFAULT_STATE.coupleInfo,
+                  ...(cloudData.coupleInfo || {})
+                }
+              });
             } else {
-              docRef.set(appData);
+              docRef.set(DEFAULT_STATE);
             }
           }, (err) => {
-            setCloudError("Pastikan Firestore Database sudah di-Enable (Test Mode): " + err.message);
+            setCloudError("Gagal sinkronisasi: " + err.message);
             setIsCloudConnected(false);
           });
 
           return () => unsubscribe();
         } catch (err) {
-          setCloudError("Gagal menghubungkan Firebase: " + err.message);
+          setCloudError("Koneksi bermasalah: " + err.message);
           setIsCloudConnected(false);
         }
-      }, [firebaseConfigStr, roomCode]);
+      }, []);
 
-      // Simpan Lokal + Push ke Cloud
       const updateSharedData = async (newData) => {
         setAppData(newData);
-        localStorage.setItem(`feelus_data_${roomCode}`, JSON.stringify(newData));
-        if (isCloudConnected && dbRef.current) {
+        if (dbRef.current) {
           try {
-            await dbRef.current.collection("feelus_rooms").doc(roomCode).set(newData);
+            await dbRef.current.collection("feelus_rooms").doc(MAIN_DOC_ID).set(newData);
           } catch (e) {
             console.error("Cloud update error:", e);
           }
@@ -175,8 +142,7 @@
       const handleSendMessage = (e) => {
         e.preventDefault();
         if (!chatInput.trim()) return;
-        const now = new Date();
-        const timeStr = now.toTimeString().slice(0, 5);
+        const timeStr = new Date().toTimeString().slice(0, 5);
         const newMsg = {
           id: Date.now(),
           sender: activeRole,
@@ -186,7 +152,7 @@
         };
         updateSharedData({
           ...appData,
-          messages: [...appData.messages, newMsg]
+          messages: [...(appData.messages || []), newMsg]
         });
         setChatInput("");
         setMsgType("text");
@@ -199,7 +165,7 @@
           ...appData,
           coupleInfo: { ...appData.coupleInfo, lastTouch: text },
           messages: [
-            ...appData.messages,
+            ...(appData.messages || []),
             { id: Date.now(), sender: activeRole, text: `✨ ${text}`, time: now, type: "lovenote" }
           ]
         });
@@ -215,12 +181,11 @@
           location: newPostLocation || "Ruang Kita",
           imageUrl: newPostImage || "https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=800&q=80",
           likes: [activeRole],
-          comments: [],
           time: "Baru saja"
         };
         updateSharedData({
           ...appData,
-          posts: [newPost, ...appData.posts]
+          posts: [newPost, ...(appData.posts || [])]
         });
         setNewPostCaption("");
         setNewPostImage("");
@@ -228,7 +193,7 @@
       };
 
       const toggleBucket = (id) => {
-        const updated = appData.bucketList.map(item =>
+        const updated = (appData.bucketList || []).map(item =>
           item.id === id ? { ...item, done: !item.done } : item
         );
         updateSharedData({ ...appData, bucketList: updated });
@@ -239,14 +204,13 @@
         if (!newBucket.trim()) return;
         updateSharedData({
           ...appData,
-          bucketList: [...appData.bucketList, { id: Date.now(), title: newBucket, done: false }]
+          bucketList: [...(appData.bucketList || []), { id: Date.now(), title: newBucket, done: false }]
         });
         setNewBucket("");
       };
 
       return (
         <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl flex flex-col border-x border-rose-100">
-          {/* Header Brand & Status Cloud */}
           <header className="bg-gradient-to-r from-rose-500 to-pink-500 text-white p-4 shadow-md">
             <div className="flex items-center justify-between">
               <div>
@@ -271,11 +235,12 @@
               </button>
             </div>
 
-            {/* Bar Kode Ruang & Pilih Peran Perangkat */}
             <div className="mt-3 pt-2.5 border-t border-white/20 flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="opacity-80">Kode Ruang:</span>
-                <span className="font-mono font-bold bg-black/20 px-2 py-0.5 rounded">{roomCode}</span>
+                <span className="font-mono font-bold bg-black/20 px-2 py-0.5 rounded">
+                  {appData.coupleInfo.roomCode || "KITA-BERDUA-01"}
+                </span>
               </div>
               <div className="flex items-center gap-1 bg-black/15 p-0.5 rounded-lg">
                 <button
@@ -294,25 +259,23 @@
             </div>
           </header>
 
-          {/* Bar Mood & Sentuhan Cepat */}
           <div className="bg-rose-50 px-4 py-2.5 border-b border-rose-100 flex items-center justify-between text-xs">
             <div className="truncate pr-2">
               <span className="font-semibold text-rose-700">Notifikasi: </span>
               <span className="text-slate-600">{appData.coupleInfo.lastTouch}</span>
             </div>
             <div className="flex gap-1 shrink-0">
-              <button onClick={() => sendTouch("Peluk Hangat 🫂")} title="Kirim Peluk" className="bg-white hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200">🫂</button>
-              <button onClick={() => sendTouch("Cium Jauh 😘")} title="Kirim Cium" className="bg-white hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200">😘</button>
-              <button onClick={() => sendTouch("Colek Kangen 👉")} title="Colek Kangen" className="bg-white hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200">👉</button>
+              <button onClick={() => sendTouch("Peluk Hangat 🫂")} className="bg-white hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200">🫂</button>
+              <button onClick={() => sendTouch("Cium Jauh 😘")} className="bg-white hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200">😘</button>
+              <button onClick={() => sendTouch("Colek Kangen 👉")} className="bg-white hover:bg-rose-100 p-1.5 rounded-lg border border-rose-200">👉</button>
             </div>
           </div>
 
-          {/* Konten Utama */}
           <main className="flex-1 overflow-y-auto p-4 space-y-4">
             {activeTab === "chat" && (
               <div className="flex flex-col h-[62vh]">
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                  {appData.messages.map((msg) => {
+                  {(appData.messages || []).map((msg) => {
                     const isMe = msg.sender === activeRole;
                     return (
                       <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -333,7 +296,6 @@
                       </div>
                     );
                   })}
-                  <div ref={chatEndRef} />
                 </div>
 
                 <form onSubmit={handleSendMessage} className="mt-3 pt-2 border-t border-slate-100 flex gap-2">
@@ -391,7 +353,7 @@
                   </button>
                 </form>
 
-                {appData.posts.map((post) => (
+                {(appData.posts || []).map((post) => (
                   <div key={post.id} className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm bg-white">
                     <div className="p-3 flex items-center justify-between">
                       <div>
@@ -400,7 +362,7 @@
                         </p>
                         <p className="text-[11px] text-slate-400">📍 {post.location} • {post.time}</p>
                       </div>
-                      <span className="text-rose-500 text-sm">❤️ {post.likes.length}</span>
+                      <span className="text-rose-500 text-sm">❤️ {(post.likes || []).length}</span>
                     </div>
                     <img src={post.imageUrl} alt="Moment" className="w-full h-48 object-cover" />
                     <div className="p-3">
@@ -417,13 +379,13 @@
                   <span className="text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-bold">
                     💬 Deep Talk Harian
                   </span>
-                  <p className="text-sm font-semibold">{appData.deepTalk.question}</p>
+                  <p className="text-sm font-semibold">{appData.deepTalk?.question}</p>
                   <div className="space-y-2 text-xs">
                     <div className="bg-white/15 p-2.5 rounded-xl">
                       <p className="font-bold text-rose-100">{appData.coupleInfo.partner1}:</p>
                       <input
                         type="text"
-                        value={appData.deepTalk.answer1}
+                        value={appData.deepTalk?.answer1 || ""}
                         onChange={(e) =>
                           updateSharedData({
                             ...appData,
@@ -437,7 +399,7 @@
                       <p className="font-bold text-rose-100">{appData.coupleInfo.partner2}:</p>
                       <input
                         type="text"
-                        value={appData.deepTalk.answer2}
+                        value={appData.deepTalk?.answer2 || ""}
                         onChange={(e) =>
                           updateSharedData({
                             ...appData,
@@ -465,7 +427,7 @@
                     </button>
                   </form>
                   <div className="space-y-2">
-                    {appData.bucketList.map((item) => (
+                    {(appData.bucketList || []).map((item) => (
                       <div
                         key={item.id}
                         onClick={() => toggleBucket(item.id)}
@@ -483,53 +445,40 @@
             )}
           </main>
 
-          {/* Navigasi Bawah */}
           <nav className="border-t border-slate-100 bg-white grid grid-cols-3 py-2 text-center text-xs font-semibold">
-            <button
-              onClick={() => setActiveTab("chat")}
-              className={`py-1.5 ${activeTab === "chat" ? "text-rose-600" : "text-slate-400"}`}
-            >
+            <button onClick={() => setActiveTab("chat")} className={`py-1.5 ${activeTab === "chat" ? "text-rose-600" : "text-slate-400"}`}>
               💬 Obrolan
             </button>
-            <button
-              onClick={() => setActiveTab("feed")}
-              className={`py-1.5 ${activeTab === "feed" ? "text-rose-600" : "text-slate-400"}`}
-            >
+            <button onClick={() => setActiveTab("feed")} className={`py-1.5 ${activeTab === "feed" ? "text-rose-600" : "text-slate-400"}`}>
               📸 Linimasa
             </button>
-            <button
-              onClick={() => setActiveTab("goals")}
-              className={`py-1.5 ${activeTab === "goals" ? "text-rose-600" : "text-slate-400"}`}
-            >
+            <button onClick={() => setActiveTab("goals")} className={`py-1.5 ${activeTab === "goals" ? "text-rose-600" : "text-slate-400"}`}>
               🎯 Deep Talk & Goals
             </button>
           </nav>
 
-          {/* Modal Pengaturan Cloud & Ruang Pasangan */}
           {showCloudModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-base font-bold text-slate-800">☁️ Pengaturan Cloud & Ruang</h2>
+                  <h2 className="text-base font-bold text-slate-800">☁️ Pengaturan Ruang Kita</h2>
                   <button onClick={() => setShowCloudModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
                 </div>
 
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Kode Ruang Rahasia (Couple Code)</label>
+                    <label className="font-semibold text-slate-700 block mb-1">Kode Ruang Rahasia (Otomatis Sinkron)</label>
                     <input
                       type="text"
-                      value={roomCode}
-                      onChange={(e) => {
-                        const val = e.target.value.toUpperCase();
-                        setRoomCode(val);
-                        localStorage.setItem("feelus_room", val);
-                      }}
+                      value={appData.coupleInfo.roomCode || ""}
+                      onChange={(e) =>
+                        updateSharedData({
+                          ...appData,
+                          coupleInfo: { ...appData.coupleInfo, roomCode: e.target.value.toUpperCase() }
+                        })
+                      }
                       className="w-full border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-rose-600"
                     />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Gunakan kode yang sama di HP Anda dan HP pasangan.
-                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -563,9 +512,24 @@
                     </div>
                   </div>
 
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Tanggal Jadian (Anniversary)</label>
+                    <input
+                      type="date"
+                      value={appData.coupleInfo.anniversary}
+                      onChange={(e) =>
+                        updateSharedData({
+                          ...appData,
+                          coupleInfo: { ...appData.coupleInfo, anniversary: e.target.value }
+                        })
+                      }
+                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5"
+                    />
+                  </div>
+
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-emerald-800">
-                    <p className="font-bold">✅ Terhubung Otomatis ke Cloud</p>
-                    <p className="text-[11px] mt-0.5">Project ID: <span className="font-mono font-semibold">feelus-7612d</span></p>
+                    <p className="font-bold">✅ Sinkronisasi Otomatis Aktif</p>
+                    <p className="text-[11px] mt-0.5">Perubahan di sini otomatis terganti di semua perangkat.</p>
                     {cloudError && <p className="text-red-500 text-[11px] mt-1">{cloudError}</p>}
                   </div>
                 </div>
