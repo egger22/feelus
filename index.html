@@ -11,7 +11,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- Babel for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Firebase Compat SDK for Easy Single-File Cloud Sync -->
+  <!-- Firebase Compat SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <style>
@@ -24,6 +24,13 @@
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
+
+    // Konfigurasi Cloud Firebase Otomatis (feelus-7612d)
+    const DEFAULT_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyBHX_1nKsmXX5DHTAnctf_00j01ARTRCrw",
+      authDomain: "feelus-7612d.firebaseapp.com",
+      projectId: "feelus-7612d"
+    };
 
     const DEFAULT_STATE = {
       coupleInfo: {
@@ -74,8 +81,20 @@
         return saved ? JSON.parse(saved) : DEFAULT_STATE;
       });
 
-      // Status Cloud Firebase
-      const [firebaseConfigStr, setFirebaseConfigStr] = useState(() => localStorage.getItem("feelus_fb_config") || "");
+      // Status Cloud Firebase (Otomatis menggunakan DEFAULT_FIREBASE_CONFIG)
+      const [firebaseConfigStr, setFirebaseConfigStr] = useState(() => {
+        const savedConfig = localStorage.getItem("feelus_fb_config");
+        if (savedConfig) {
+          try {
+            JSON.parse(savedConfig);
+            return savedConfig;
+          } catch (e) {
+            localStorage.removeItem("feelus_fb_config");
+          }
+        }
+        return JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
+      });
+
       const [isCloudConnected, setIsCloudConnected] = useState(false);
       const [cloudError, setCloudError] = useState("");
       const [showCloudModal, setShowCloudModal] = useState(false);
@@ -92,12 +111,17 @@
 
       // Inisialisasi & Sinkronisasi Firebase Firestore
       useEffect(() => {
-        if (!firebaseConfigStr.trim()) {
-          setIsCloudConnected(false);
-          return;
-        }
+        let parsedConfig = DEFAULT_FIREBASE_CONFIG;
         try {
-          const parsedConfig = JSON.parse(firebaseConfigStr);
+          if (firebaseConfigStr.trim()) {
+            parsedConfig = JSON.parse(firebaseConfigStr);
+          }
+        } catch (err) {
+          setCloudError("Format JSON tidak valid, menggunakan konfigurasi bawaan.");
+          parsedConfig = DEFAULT_FIREBASE_CONFIG;
+        }
+
+        try {
           if (!firebase.apps.length) {
             firebase.initializeApp(parsedConfig);
           }
@@ -114,13 +138,13 @@
               docRef.set(appData);
             }
           }, (err) => {
-            setCloudError("Gagal sinkronisasi: " + err.message);
+            setCloudError("Pastikan Firestore Database sudah di-Enable (Test Mode): " + err.message);
             setIsCloudConnected(false);
           });
 
           return () => unsubscribe();
         } catch (err) {
-          setCloudError("Format JSON Firebase Config tidak valid.");
+          setCloudError("Gagal menghubungkan Firebase: " + err.message);
           setIsCloudConnected(false);
         }
       }, [firebaseConfigStr, roomCode]);
@@ -138,7 +162,6 @@
         }
       };
 
-      // Hitung Hari Jadian
       const calculateDays = (dateStr) => {
         const start = new Date(dateStr);
         const now = new Date();
@@ -149,7 +172,6 @@
       const myName = activeRole === "partner1" ? appData.coupleInfo.partner1 : appData.coupleInfo.partner2;
       const partnerName = activeRole === "partner1" ? appData.coupleInfo.partner2 : appData.coupleInfo.partner1;
 
-      // Fungsi Kirim Pesan
       const handleSendMessage = (e) => {
         e.preventDefault();
         if (!chatInput.trim()) return;
@@ -170,7 +192,6 @@
         setMsgType("text");
       };
 
-      // Fungsi Kirim Perhatian 1-Klik
       const sendTouch = (actionText) => {
         const text = `${myName} mengirim ${actionText}`;
         const now = new Date().toTimeString().slice(0, 5);
@@ -184,7 +205,6 @@
         });
       };
 
-      // Fungsi Tambah Post Feed
       const handleAddPost = (e) => {
         e.preventDefault();
         if (!newPostCaption.trim()) return;
@@ -207,7 +227,6 @@
         setNewPostLocation("");
       };
 
-      // Fungsi Toggle Bucket List
       const toggleBucket = (id) => {
         const updated = appData.bucketList.map(item =>
           item.id === id ? { ...item, done: !item.done } : item
@@ -248,7 +267,7 @@
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${isCloudConnected ? "bg-white animate-ping" : "bg-amber-500"}`}></span>
-                {isCloudConnected ? "Cloud Aktif" : "⚙️ Hubungkan Cloud"}
+                {isCloudConnected ? "Cloud Aktif" : "⚙️ Pengaturan"}
               </button>
             </div>
 
@@ -290,7 +309,6 @@
 
           {/* Konten Utama */}
           <main className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* TAB 1: OBROLAN BERDUA */}
             {activeTab === "chat" && (
               <div className="flex flex-col h-[62vh]">
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">
@@ -341,7 +359,6 @@
               </div>
             )}
 
-            {/* TAB 2: LINIMASA MOMEN (COUPLE FEED) */}
             {activeTab === "feed" && (
               <div className="space-y-4">
                 <form onSubmit={handleAddPost} className="bg-rose-50/70 p-3.5 rounded-2xl border border-rose-100 space-y-2.5">
@@ -394,7 +411,6 @@
               </div>
             )}
 
-            {/* TAB 3: DEEP TALK & BUCKET LIST */}
             {activeTab === "goals" && (
               <div className="space-y-4">
                 <div className="bg-gradient-to-br from-rose-500 to-pink-600 text-white p-4 rounded-2xl shadow-sm space-y-3">
@@ -434,7 +450,6 @@
                   </div>
                 </div>
 
-                {/* Couple Bucket List */}
                 <div className="border border-slate-200 rounded-2xl p-4 space-y-3">
                   <h3 className="text-sm font-bold text-slate-800">✨ Couple Bucket List</h3>
                   <form onSubmit={addBucketItem} className="flex gap-2">
@@ -548,18 +563,9 @@
                     </div>
                   </div>
 
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Firebase Config (JSON)</label>
-                    <textarea
-                      rows="4"
-                      placeholder='{"apiKey": "...", "projectId": "...", ...}'
-                      value={firebaseConfigStr}
-                      onChange={(e) => {
-                        setFirebaseConfigStr(e.target.value);
-                        localStorage.setItem("feelus_fb_config", e.target.value);
-                      }}
-                      className="w-full border border-slate-200 rounded-xl p-2 font-mono text-[11px]"
-                    />
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-emerald-800">
+                    <p className="font-bold">✅ Terhubung Otomatis ke Cloud</p>
+                    <p className="text-[11px] mt-0.5">Project ID: <span className="font-mono font-semibold">feelus-7612d</span></p>
                     {cloudError && <p className="text-red-500 text-[11px] mt-1">{cloudError}</p>}
                   </div>
                 </div>
